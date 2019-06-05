@@ -151,6 +151,16 @@ border space w screen = w screen'
 rectangleSolid :: Window
 rectangleSolid (x,y) = Gloss.rectangleSolid (realToFrac x) (realToFrac y)
 
+circle :: Window
+circle (x,y) = Gloss.circle r
+    where
+    r = (realToFrac $ min x y) / 2
+
+circleSolid :: Window
+circleSolid (x,y) = Gloss.circleSolid r
+    where
+    r = (realToFrac $ min x y) / 2
+
 rectangleWire :: Window
 rectangleWire (x,y) = Gloss.rectangleWire (realToFrac x) (realToFrac y)
 
