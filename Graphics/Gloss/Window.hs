@@ -5,21 +5,22 @@ module Graphics.Gloss.Window where
 import Graphics.Gloss.Picture.Size
 import Graphics.Gloss (Picture(..),Point(..),Display(..),Path(..))
 import qualified Graphics.Gloss as Gloss
+import Graphics.Gloss.Interface.Environment
 
 import Data.Semigroup
 import Data.Monoid
 
 type Dimension = (Int,Int)
 
-displayDimension :: Display -> Dimension
+displayDimension :: Display -> IO Dimension
 #if defined(ghcjs_HOST_OS)
     
-displayDimension (Display x y) = (x,y)
+displayDimension (Display x y) = return (x,y)
 
 #else
     
-displayDimension (InWindow _ dim _) = dim
-displayDimension (FullScreen) = (800,600)
+displayDimension (InWindow _ dim _) = return dim
+displayDimension (FullScreen) = getScreenSize
     
 #endif
 
