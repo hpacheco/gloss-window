@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP, ViewPatterns, TypeSynonymInstances, FlexibleInstances #-}
+{-# LANGUAGE CPP, ScopedTypeVariables, ViewPatterns, TypeSynonymInstances, FlexibleInstances #-}
 
 module Graphics.Gloss.Window where
 
@@ -44,7 +44,17 @@ instance Monoid Window where
 square :: Window -> Window
 square w (x,y) = w (xy,xy)
     where xy = min x y
-    
+
+vhsSquare :: [[Window]] -> Window
+vhsSquare wws (wx,wy) = vhs wws (floor wx',floor wy')
+    where
+    wx' = side * realToFrac l
+    wy' = side * realToFrac c
+    (side::Float) = min (realToFrac wx / realToFrac l) (realToFrac wy / realToFrac c)
+    (l,c) = matrixDimension wws
+    matrixDimension [] = (0,0)
+    matrixDimension (x:xs) = (length x,succ $ length xs)
+
 empty :: Window
 empty (x,y) = Blank
     
@@ -167,3 +177,5 @@ rectangleWire (x,y) = Gloss.rectangleWire (realToFrac x) (realToFrac y)
 fixedV :: Int -> Window -> Window
 fixedV y w (sx,sy) = w (sx,y)
 
+rotate :: Float -> Window -> Window
+rotate ang w screen = Gloss.rotate ang $ w screen
