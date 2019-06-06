@@ -179,3 +179,6 @@ fixedV y w (sx,sy) = w (sx,y)
 
 rotate :: Float -> Window -> Window
 rotate ang w screen = Gloss.rotate ang $ w screen
+
+text :: String -> Window
+text = const . Gloss.Text
