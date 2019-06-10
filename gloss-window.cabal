@@ -26,7 +26,7 @@ Library
 
   if impl(ghcjs)
     Build-depends:
-                       codeworld-haap-api
+                       codeworld-api-gloss
   else
     Build-depends:     gloss
 
