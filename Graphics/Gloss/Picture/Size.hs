@@ -36,7 +36,10 @@ bbox (Arc _ _ _) = error "not handled"
 bbox (ThickArc _ _ _ _) = error "not handled"
 bbox (Text _) = Points [] -- TODO: hack
 #if defined(ghcjs_HOST_OS)
+#if MIN_VERSION_codeworld_api_gloss(0,3,1)
+#else
 bbox (Image {}) = error "not flat!"
+#endif
 #else
 bbox (Bitmap {}) = error "not flat!"
 #endif
@@ -155,7 +158,10 @@ norm (Rotate alpha p) = map (Rotate alpha) (norm p)
 norm (Pictures l) = concat (map norm l)
 norm Blank = []
 #if defined(ghcjs_HOST_OS)
+#if MIN_VERSION_codeworld_api_gloss(0,3,1)
+#else
 norm (Image w h _) = [Gloss.rectangleWire (fromIntegral w) (fromIntegral h)]
+#endif
 #else
 #if MIN_VERSION_gloss(1,13,0)
 norm (Bitmap dta) = [Gloss.rectangleWire (fromIntegral w) (fromIntegral h)]
