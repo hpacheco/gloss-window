@@ -121,6 +121,14 @@ vT mkTop w1 w2 dim@(sx,sy) = Pictures [Translate 0 (realToFrac sy2/2) $ w1 (sx,s
     where
     sy1 = mkTop sy
     sy2 = sy - sy1
+
+-- bottom-biased vertical composition
+-- function determines the height of the bottom window
+vB :: (Int -> Int) -> Window -> Window -> Window
+vB mkBot w1 w2 dim@(sx,sy) = Pictures [Translate 0 (realToFrac sy2/2) $ w1 (sx,sy1),Translate 0 (-realToFrac sy1/2) $ w2 (sx,sy2)]
+    where
+    sy2 = mkBot sy
+    sy1 = sy - sy2
     
 -- vertically merge two windows after drawing (does not guarantee vertical size fits within window)
 --vMerge :: Window -> Window -> Window
