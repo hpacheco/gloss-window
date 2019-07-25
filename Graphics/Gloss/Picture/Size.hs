@@ -1,7 +1,7 @@
 {-# LANGUAGE CPP, ViewPatterns, TypeSynonymInstances, FlexibleInstances #-}
 
 module Graphics.Gloss.Picture.Size
-    (pictureSize)
+    (pictureSize,flattenPicture,flattenScale,flattenTranslate,flattenRotate)
     where
 
 import Graphics.Gloss (Picture(..),Point(..),Display(..),Path(..))
@@ -25,6 +25,41 @@ deg alpha = alpha * 180 / pi
 
 type Elipsis = (Float,Float,Float,Float,Float,Float)
 data BB = Elipsis Elipsis | Points [Point] deriving Show
+
+flattenPicture :: Picture -> Picture
+flattenPicture Blank = Blank
+flattenPicture (Polygon l) = Polygon l
+flattenPicture (Line l) = Line l
+flattenPicture (Circle r) = Circle r
+flattenPicture (ThickCircle r l) = ThickCircle r l
+flattenPicture (Arc x y z) = Arc x y z
+flattenPicture (ThickArc x y z w) = ThickArc x y z w
+flattenPicture (Text str) = Text str
+#if defined(ghcjs_HOST_OS)
+#if MIN_VERSION_codeworld_api_gloss(0,3,1)
+#else
+flattenPicture (Image dta) = Image dta
+#endif
+#else
+flattenPicture (Bitmap dta) = Bitmap dta
+#endif
+flattenPicture (Color c p) = Color c $ flattenPicture p
+flattenPicture (Scale x y p) = flattenScale x y $ flattenPicture p
+flattenPicture (Translate x y p) = flattenTranslate x y $ flattenPicture p
+flattenPicture (Rotate a p) = flattenRotate a $ flattenPicture p
+flattenPicture (Pictures ps) = Pictures $ map flattenPicture ps
+
+flattenScale :: Float -> Float -> Picture -> Picture
+flattenScale sx sy (Scale x y p) = flattenScale (sx+x) (sy+y) p
+flattenScale sx sy p = Scale sx sy p
+
+flattenTranslate :: Float -> Float -> Picture -> Picture
+flattenTranslate sx sy (Translate x y p) = flattenTranslate (sx+x) (sy+y) p
+flattenTranslate sx sy p = Translate sx sy p
+
+flattenRotate :: Float -> Picture -> Picture
+flattenRotate so (Rotate o p) = flattenRotate (so+o) p
+flattenRotate so p = Rotate so p
 
 bbox :: Picture -> BB
 bbox Blank = Points []

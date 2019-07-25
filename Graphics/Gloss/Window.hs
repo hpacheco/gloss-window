@@ -94,13 +94,13 @@ stretch pic@(pictureSize -> (cx,cy)) screen@(sx,sy) = Scale scalex scaley pic
 -- left-biased horizontal composition
 -- function determines the width of the left window
 hL :: (Int -> Int) -> Window -> Window -> Window
-hL mkLeft w1 w2 (sx,sy) = Pictures [Translate (-realToFrac sx2/2) 0 $ w1 (sx1,sy),Translate (realToFrac sx1/2) 0 $ w2 (sx2,sy)]
+hL mkLeft w1 w2 (sx,sy) = Pictures [flattenTranslate (-realToFrac sx2/2) 0 $ w1 (sx1,sy),flattenTranslate (realToFrac sx1/2) 0 $ w2 (sx2,sy)]
     where
     sx1 = mkLeft sx
     sx2 = sx - sx1
 
 hR :: (Int -> Int) -> Window -> Window -> Window
-hR mkRight w1 w2 (sx,sy) = Pictures [Translate (-realToFrac sx2/2) 0 $ w1 (sx1,sy),Translate (realToFrac sx1/2) 0 $ w2 (sx2,sy)]
+hR mkRight w1 w2 (sx,sy) = Pictures [flattenTranslate (-realToFrac sx2/2) 0 $ w1 (sx1,sy),flattenTranslate (realToFrac sx1/2) 0 $ w2 (sx2,sy)]
     where
     sx1 = sx - sx2
     sx2 = mkRight sx
@@ -117,7 +117,7 @@ hs ws dim@(dimx,dimy) = go ws dim
 -- top-biased vertical composition
 -- function determines the height of the top window
 vT :: (Int -> Int) -> Window -> Window -> Window
-vT mkTop w1 w2 dim@(sx,sy) = Pictures [Translate 0 (realToFrac sy2/2) $ w1 (sx,sy1),Translate 0 (-realToFrac sy1/2) $ w2 (sx,sy2)]
+vT mkTop w1 w2 dim@(sx,sy) = Pictures [flattenTranslate 0 (realToFrac sy2/2) $ w1 (sx,sy1),flattenTranslate 0 (-realToFrac sy1/2) $ w2 (sx,sy2)]
     where
     sy1 = mkTop sy
     sy2 = sy - sy1
@@ -125,7 +125,7 @@ vT mkTop w1 w2 dim@(sx,sy) = Pictures [Translate 0 (realToFrac sy2/2) $ w1 (sx,s
 -- bottom-biased vertical composition
 -- function determines the height of the bottom window
 vB :: (Int -> Int) -> Window -> Window -> Window
-vB mkBot w1 w2 dim@(sx,sy) = Pictures [Translate 0 (realToFrac sy2/2) $ w1 (sx,sy1),Translate 0 (-realToFrac sy1/2) $ w2 (sx,sy2)]
+vB mkBot w1 w2 dim@(sx,sy) = Pictures [flattenTranslate 0 (realToFrac sy2/2) $ w1 (sx,sy1),flattenTranslate 0 (-realToFrac sy1/2) $ w2 (sx,sy2)]
     where
     sy2 = mkBot sy
     sy1 = sy - sy2
