@@ -51,14 +51,17 @@ flattenPicture (Pictures ps) = Pictures $ map flattenPicture ps
 
 flattenScale :: Float -> Float -> Picture -> Picture
 flattenScale sx sy (Scale x y p) = flattenScale (sx+x) (sy+y) p
+flattenScale sx sy (Pictures ps) = Pictures $ map (flattenScale sx sy) ps
 flattenScale sx sy p = Scale sx sy p
 
 flattenTranslate :: Float -> Float -> Picture -> Picture
 flattenTranslate sx sy (Translate x y p) = flattenTranslate (sx+x) (sy+y) p
+flattenTranslate sx sy (Pictures ps) = Pictures $ map (flattenTranslate sx sy) ps
 flattenTranslate sx sy p = Translate sx sy p
 
 flattenRotate :: Float -> Picture -> Picture
 flattenRotate so (Rotate o p) = flattenRotate (so+o) p
+flattenRotate so (Pictures ps) = Pictures $ map (flattenRotate so) ps
 flattenRotate so p = Rotate so p
 
 bbox :: Picture -> BB
