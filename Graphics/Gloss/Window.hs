@@ -81,7 +81,10 @@ fitH pic@(pictureSize -> (cx,cy)) screen@(sx,sy) = Scale scalex scalex pic
     scalex = realToFrac sx / realToFrac cx
     
 fitV :: Picture -> Window
-fitV pic@(pictureSize -> (cx,cy)) screen@(sx,sy) = Scale scaley scaley pic
+fitV pic = fst . fitV' pic
+
+fitV' :: Picture -> Dimension -> (Picture,Int)
+fitV' pic@(pictureSize -> (cx,cy)) screen@(sx,sy) = (Scale scaley scaley pic,round $ realToFrac cx * scaley)
     where
     scaley = realToFrac sy / realToFrac cy
     
@@ -90,6 +93,11 @@ stretch pic@(pictureSize -> (cx,cy)) screen@(sx,sy) = Scale scalex scaley pic
     where
     scalex = realToFrac sx / realToFrac cx
     scaley = realToFrac sy / realToFrac cy
+
+hLFitV :: Picture -> Window -> Window
+hLFitV p w2 s = hL (const hl) (const pl) w2 s
+    where
+    (pl,hl) = fitV' p s
 
 -- left-biased horizontal composition
 -- function determines the width of the left window
@@ -187,6 +195,11 @@ fixedV y w (sx,sy) = w (sx,y)
 
 rotate :: Float -> Window -> Window
 rotate ang w screen = Gloss.rotate ang $ w screen
+
+translate :: (Dimension -> Point) -> Window -> Window
+translate factor w screen = Gloss.translate fx fy $ w screen
+    where
+    (fx,fy) = factor screen
 
 text :: String -> Window
 text = const . Gloss.Text
