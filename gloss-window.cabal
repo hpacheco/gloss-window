@@ -15,10 +15,11 @@ Description:
 Library
   Hs-source-dirs:      .
   Exposed-modules:     Graphics.Gloss.Window
-                      ,Graphics.Gloss.Picture.Size
+                      ,Graphics.Gloss.Window.Picture
+                      ,Graphics.Gloss.Window.Dimension
             
   Other-modules:       
-  Build-depends:       base                 >= 4.8 && < 5
+  Build-depends:       base >= 4.8 && < 5, mtl, pointless-haskell
 
   if impl(ghc < 8.0)
     build-depends:

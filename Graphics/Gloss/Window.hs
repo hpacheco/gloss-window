@@ -1,8 +1,9 @@
-{-# LANGUAGE CPP, ScopedTypeVariables, ViewPatterns, TypeSynonymInstances, FlexibleInstances #-}
+{-# LANGUAGE CPP, ScopedTypeVariables, GeneralizedNewtypeDeriving, ViewPatterns, TypeSynonymInstances, FlexibleInstances #-}
 
 module Graphics.Gloss.Window where
 
-import Graphics.Gloss.Picture.Size
+import Graphics.Gloss.Window.Picture
+import Graphics.Gloss.Window.Dimension
 import Graphics.Gloss (Picture(..),Point(..),Display(..),Path(..))
 import qualified Graphics.Gloss as Gloss
 import Graphics.Gloss.Interface.Environment
@@ -10,196 +11,248 @@ import Graphics.Gloss.Interface.Environment
 import Data.Semigroup
 import Data.Monoid
 
-type Dimension = (Int,Int)
+import Control.Monad.Reader (Reader(..),ReaderT(..))
+import qualified Control.Monad.Reader as Reader
+import Control.Monad.Writer (Writer(..),WriterT(..))
+import qualified Control.Monad.Writer as Writer
 
-displayDimension :: Display -> IO Dimension
-#if defined(ghcjs_HOST_OS)
+import Generics.Pointless.Combinators
+
+-- * Monad
+
+newtype Window a = Window { unWindow :: ReaderT Dimension (Writer Picture) a }
+    deriving (Monad,Applicative,Functor)
+
+mkWindow :: (Dimension -> Picture) -> Window ()
+mkWindow f = Window $ do
+    screen <- Reader.ask
+    Writer.tell $ f screen
+
+runWindow :: Dimension -> Window a -> (a,Picture)
+runWindow screen (Window w) = Writer.runWriter (Reader.runReaderT w screen)
+
+withDimension :: (Dimension -> Dimension) -> Window a -> Window a
+withDimension f (Window w) = Window $ Reader.local f w
+
+mapPicture :: (Picture -> Picture) -> Window a -> Window a
+mapPicture f (Window w) = Window $ Reader.mapReaderT (Writer.mapWriter (id >< f)) w
+
+-- * General combinators
+
+empty :: Window ()
+empty = Window $ Writer.tell Blank
     
-displayDimension (Display x y) = return (x,y)
+many :: [Window a] -> Window [a]
+many = sequence
 
-#else
+-- | draws a square window inside the current window
+square :: Window a -> Window a
+square w = withDimension f w
+    where f (x,y) = let xy = min x y in (xy,xy)
     
-displayDimension (InWindow _ dim _) = return dim
-displayDimension (FullScreen) = getScreenSize
-    
-#endif
-
-
-infix .-.
-(.-.) :: Dimension -> Dimension -> Dimension
-(x1,y1) .-. (x2,y2) = (x1 - x2,y1 - y2)
-
--- a function that draws a picture for aa given window size
-type Window = Dimension -> Picture
-
---instance Semigroup Window where
---	(<>) = mappend
-
-instance Monoid Window where
-    mempty = empty
-    mappend x y = many [x,y]
-    mconcat = many  
-
--- | draws a square inside the current window
-square :: Window -> Window
-square w (x,y) = w (xy,xy)
-    where xy = min x y
-
-vhsSquare :: [[Window]] -> Window
-vhsSquare wws (wx,wy) = vhs wws (floor wx',floor wy')
-    where
-    wx' = side * realToFrac l
-    wy' = side * realToFrac c
-    (side::Float) = min (realToFrac wx / realToFrac l) (realToFrac wy / realToFrac c)
-    (l,c) = matrixDimension wws
-    matrixDimension [] = (0,0)
-    matrixDimension (x:xs) = (length x,succ $ length xs)
-
-empty :: Window
-empty (x,y) = Blank
-    
-many :: [Window] -> Window
-many ws screen = Pictures $ map (\w -> w screen) ws
-
-alignL :: Window -> Window
-alignL w screen@(sx,sy) = Translate (-realToFrac diffx/2) 0 pic
-    where
-    pic = w screen
-    (cx,cy) = pictureSize pic
-    diffx = max 0 (sx-cx)
-
-fit :: Picture -> Window
-fit pic@(pictureSize -> (cx,cy)) screen@(sx,sy) = Scale scalexy scalexy pic
-    where
-    scalex = realToFrac sx / realToFrac cx
-    scaley = realToFrac sy / realToFrac cy
-    scalexy = min scalex scaley
-
-fitH :: Picture -> Window
-fitH pic@(pictureSize -> (cx,cy)) screen@(sx,sy) = Scale scalex scalex pic
-    where
-    scalex = realToFrac sx / realToFrac cx
-    
-fitV :: Picture -> Window
-fitV pic = fst . fitV' pic
-
-fitV' :: Picture -> Dimension -> (Picture,Int)
-fitV' pic@(pictureSize -> (cx,cy)) screen@(sx,sy) = (Scale scaley scaley pic,round $ realToFrac cx * scaley)
-    where
-    scaley = realToFrac sy / realToFrac cy
-    
-stretch :: Picture -> Window
-stretch pic@(pictureSize -> (cx,cy)) screen@(sx,sy) = Scale scalex scaley pic
-    where
-    scalex = realToFrac sx / realToFrac cx
-    scaley = realToFrac sy / realToFrac cy
-
-hLFitV :: Picture -> Window -> Window
-hLFitV p w2 s = hL (const hl) (const pl) w2 s
-    where
-    (pl,hl) = fitV' p s
-
--- left-biased horizontal composition
--- function determines the width of the left window
-hL :: (Int -> Int) -> Window -> Window -> Window
-hL mkLeft w1 w2 (sx,sy) = Pictures [flattenTranslate (-realToFrac sx2/2) 0 $ w1 (sx1,sy),flattenTranslate (realToFrac sx1/2) 0 $ w2 (sx2,sy)]
-    where
-    sx1 = mkLeft sx
-    sx2 = sx - sx1
-
-hR :: (Int -> Int) -> Window -> Window -> Window
-hR mkRight w1 w2 (sx,sy) = Pictures [flattenTranslate (-realToFrac sx2/2) 0 $ w1 (sx1,sy),flattenTranslate (realToFrac sx1/2) 0 $ w2 (sx2,sy)]
-    where
-    sx1 = sx - sx2
-    sx2 = mkRight sx
-
--- evenly splits the screen horizontally into a list
-hs :: [Window] -> Window
-hs ws dim@(dimx,dimy) = go ws dim
-    where
-    dimxn = floor $ (realToFrac dimx) / (realToFrac $ length ws)
-    go [] = empty
-    go (x:xs) = hL (const dimxn) x (go xs)
-
-
 -- top-biased vertical composition
 -- function determines the height of the top window
-vT :: (Int -> Int) -> Window -> Window -> Window
-vT mkTop w1 w2 dim@(sx,sy) = Pictures [flattenTranslate 0 (realToFrac sy2/2) $ w1 (sx,sy1),flattenTranslate 0 (-realToFrac sy1/2) $ w2 (sx,sy2)]
-    where
-    sy1 = mkTop sy
-    sy2 = sy - sy1
+vT :: Int -> Window a -> Window b -> Window (a,b)
+vT sy1 w1 w2  = Window $ do
+    dim@(sx,sy) <- Reader.ask
+    let sy2 = sy - sy1
+    let (a,p1) = runWindow (sx,sy1) w1
+    let (b,p2) = runWindow (sx,sy2) w2
+    Writer.tell $ Pictures [flattenTranslate 0 (realToFrac sy2/2) p1,flattenTranslate 0 (-realToFrac sy1/2) p2]
+    return (a,b)
 
 -- bottom-biased vertical composition
 -- function determines the height of the bottom window
-vB :: (Int -> Int) -> Window -> Window -> Window
-vB mkBot w1 w2 dim@(sx,sy) = Pictures [flattenTranslate 0 (realToFrac sy2/2) $ w1 (sx,sy1),flattenTranslate 0 (-realToFrac sy1/2) $ w2 (sx,sy2)]
-    where
-    sy2 = mkBot sy
-    sy1 = sy - sy2
-    
--- vertically merge two windows after drawing (does not guarantee vertical size fits within window)
---vMerge :: Window -> Window -> Window
---vMerge w1 w2 dim@(sx,sy) = Pictures [Translate 0 (realToFrac pic2y/2) pic1,Translate 0 (-realToFrac pic1y/2) pic2]
---    where
---    pic1 = w1 dim
---    pic2 = w2 dim
---    (pic1x,pic1y) = pictureSize pic1
---    (pic2x,pic2y) = pictureSize pic2
+vB :: Int -> Window a -> Window b -> Window (a,b)
+vB sy2 w1 w2  = Window $ do
+    dim@(sx,sy) <- Reader.ask
+    let sy1 = sy - sy2
+    let (a,p1) = runWindow (sx,sy1) w1
+    let (b,p2) = runWindow (sx,sy2) w2
+    Writer.tell $ Pictures [flattenTranslate 0 (realToFrac sy2/2) p1,flattenTranslate 0 (-realToFrac sy1/2) p2]
+    return (a,b)
 
 -- evenly splits the screen vertically into a list
-vs :: [Window] -> Window
-vs ws dim@(dimx,dimy) = go ws dim
-    where
-    dimyn = floor $ (realToFrac dimy) / (realToFrac $ length ws)
-    go [] = empty
-    go (x:xs) = vT (const dimyn) x (go xs)
+vs :: [Window a] -> Window [a]
+vs ws = Window $ do
+    dim@(dimx,dimy) <- Reader.ask
+    let dimyn = floor $ (realToFrac dimy) / (realToFrac $ length ws)
+    let go [] = fmap (Prelude.const []) empty
+        go (x:xs) = fmap (uncurry (:)) (vT dimyn x (go xs))
+    unWindow $ go ws
 
+-- left-biased horizontal composition
+-- function determines the width of the left window
+hL :: Int -> Window a -> Window b -> Window (a,b)
+hL sx1 w1 w2 = Window $ do
+    (sx,sy) <- Reader.ask
+    let sx2 = sx - sx1
+    let (a,p1) = runWindow (sx1,sy) w1
+    let (b,p2) = runWindow (sx2,sy) w2
+    Writer.tell $ Pictures [flattenTranslate (-realToFrac sx2/2) 0 p1,flattenTranslate (realToFrac sx1/2) 0 p2]
+    return (a,b)
+
+hR :: Int -> Window a -> Window b -> Window (a,b)
+hR sx2 w1 w2 = Window $ do
+    (sx,sy) <- Reader.ask
+    let sx1 = sx - sx2
+    let (a,p1) = runWindow (sx1,sy) w1
+    let (b,p2) = runWindow (sx2,sy) w2
+    Writer.tell $ Pictures [flattenTranslate (-realToFrac sx2/2) 0 p1,flattenTranslate (realToFrac sx1/2) 0 p2]
+    return (a,b)
+    
+-- evenly splits the screen horizontally into a list
+hs :: [Window a] -> Window [a]
+hs ws = Window $ do
+    dim@(dimx,dimy) <- Reader.ask
+    let dimxn = floor $ (realToFrac dimx) / (realToFrac $ length ws)
+    let go [] = fmap (Prelude.const []) empty
+        go (x:xs) = fmap (uncurry (:)) (hL dimxn x (go xs))
+    unWindow $ go ws
+  
 -- evenly splits the screen for a rows-of-columns matrix
-vhs :: [[Window]] -> Window
+vhs :: [[Window a]] -> Window [[a]]
 vhs = vs . map hs
+    
+-- splits the current window into a square matrix
+vhsSquare :: [[Window a]] -> Window [[a]]
+vhsSquare wws = withDimension mkSquare $ vhs wws 
+    where
+    mkSquare (wx,wy) = (floor wx',floor wy')
+        where
+        wx' = side * realToFrac l
+        wy' = side * realToFrac c
+        (side::Float) = min (realToFrac wx / realToFrac l) (realToFrac wy / realToFrac c)
+        (l,c) = matrixDimension wws
+        matrixDimension [] = (0,0)
+        matrixDimension (x:xs) = (length x,succ $ length xs)
+    
+-- aligns a smaller window to the left of a larger window
+alignL :: Window a -> Window a
+alignL w = Window $ do
+    screen@(sx,sy) <- Reader.ask
+    let (a,pic) = runWindow screen w
+    let (cx,cy) = pictureSize pic
+    let diffx = max 0 (sx-cx)
+    Writer.tell $ Translate (-realToFrac diffx/2) 0 pic
+    return a
 
-matrix :: Int -> Int -> (Int -> Int -> Window) -> Window
+matrix :: Int -> Int -> (Int -> Int -> Window a) -> Window [[a]]
 matrix l c draw = vhs $ map (map (uncurry draw)) m
     where
     m = [[(i,j) | j <- [0..c-1] ] | i <- [0..l-1]  ]
-
-scale :: (Dimension -> Point) -> Window -> Window
-scale factor w screen = Scale fx fy (w screen)
-    where
-    (fx,fy) = factor screen
-
-border :: (Dimension -> Int) -> Window -> Window
-border space w screen = w screen'
-    where
-    screen' = screen .-. (space screen*2,space screen*2)
     
-rectangleSolid :: Window
-rectangleSolid (x,y) = Gloss.rectangleSolid (realToFrac x) (realToFrac y)
+scale :: Point -> Window a -> Window a
+scale (fx,fy) w  = Window $ do
+    screen <- Reader.ask
+    let (a,pic) = runWindow screen w
+    Writer.tell $ Scale fx fy pic
+    return a
 
-circle :: Window
-circle (x,y) = Gloss.circle r
+translate :: Point -> Window a -> Window a
+translate (fx,fy) w  = Window $ do
+    screen <- Reader.ask
+    let (a,pic) = runWindow screen w
+    Writer.tell $ Translate fx fy pic
+    return a
+    
+border :: Int -> Window a -> Window a
+border space w = withDimension mkScreen w
     where
-    r = (realToFrac $ min x y) / 2
+    mkScreen screen = screen .-. (space*2,space*2)
+    
+rotate :: Float -> Window a -> Window a
+rotate ang w = Window $ do
+    screen <- Reader.ask
+    let (a,pic) = runWindow screen w
+    Writer.tell $ Gloss.rotate ang pic
+    return a
+    
+rectangleSolid :: Window ()
+rectangleSolid = Window $ do
+    (x,y) <- Reader.ask
+    Writer.tell $ Gloss.rectangleSolid (realToFrac x) (realToFrac y)
+    
+rectangleWire :: Window ()
+rectangleWire = Window $ do
+    (x,y) <- Reader.ask
+    Writer.tell $ Gloss.rectangleWire (realToFrac x) (realToFrac y)
+    
+circle :: Window ()
+circle = Window $ do
+    (x,y) <- Reader.ask
+    let r = (realToFrac $ min x y) / 2
+    Writer.tell $ Gloss.circle r
 
-circleSolid :: Window
-circleSolid (x,y) = Gloss.circleSolid r
+circleSolid :: Window ()
+circleSolid = Window $ do
+    (x,y) <- Reader.ask
+    let r = (realToFrac $ min x y) / 2
+    Writer.tell $ Gloss.circleSolid r
+    
+-- * Special combinators
+
+-- fit picture to window, returns picture's dimension
+fit :: Picture -> Window Dimension
+fit pic@(pictureSize -> (cx,cy)) = Window $ do
+    screen@(sx,sy) <- Reader.ask
+    let scalex = realToFrac sx / realToFrac cx
+        scaley = realToFrac sy / realToFrac cy
+        scalexy = min scalex scaley
+    Writer.tell $ Scale scalexy scalexy pic
+    return (round $ realToFrac cx * scalexy,round $ realToFrac cy * scalexy)
+
+-- horizontally fits a picture to the window, returns picture's height
+fitH :: Picture -> Window Int
+fitH pic@(pictureSize -> (cx,cy)) = Window $ do
+    screen@(sx,sy) <- Reader.ask
+    let scalex = realToFrac sx / realToFrac cx
+    Writer.tell $ Scale scalex scalex pic
+    return (round $ realToFrac cy * scalex)
+
+-- vertically fits a picture to the window, returns picture's width
+fitV :: Picture -> Window Int
+fitV pic@(pictureSize -> (cx,cy)) = Window $ do
+    screen@(sx,sy) <- Reader.ask
+    let scaley = realToFrac sy / realToFrac cy
+    Writer.tell (Scale scaley scaley pic)
+    return (round $ realToFrac cx * scaley)
+
+-- stretches a picture to fir the window
+stretch :: Picture -> Window ()
+stretch pic@(pictureSize -> (cx,cy)) = Window $ do
+    screen@(sx,sy) <- Reader.ask
+    let scalex = realToFrac sx / realToFrac cx
+        scaley = realToFrac sy / realToFrac cy
+    Writer.tell $ Scale scalex scaley pic
+    return ()
+
+charHeight :: Int
+charHeight =  100
+charWidth :: Int
+charWidth = 70
+
+text :: String -> Window Dimension
+text str = Window $ do
+    let 
+    let textWidth = realToFrac (length str) * (realToFrac charWidth)
+    Writer.tell $ Translate (-realToFrac textWidth/2) (-realToFrac charHeight/2) $ Gloss.Text str
+    return (round textWidth,charHeight)
+
+hLFitV :: Picture -> Window a -> Window (Int,a)
+hLFitV p w2 = Window $ do
+    screen <- Reader.ask
+    let (px,pic1) = runWindow screen $ fitV p
+    let w1 = Window $ do
+            Writer.tell pic1
+            return px
+    unWindow $ hL px w1 w2
+
+const :: Picture -> Window ()
+const p = Window $ Writer.tell p
+
+fixedV :: Int -> Window a -> Window a
+fixedV y w = withDimension mkDim w
     where
-    r = (realToFrac $ min x y) / 2
+    mkDim (sx,sy) = (sx,y)
 
-rectangleWire :: Window
-rectangleWire (x,y) = Gloss.rectangleWire (realToFrac x) (realToFrac y)
-
-fixedV :: Int -> Window -> Window
-fixedV y w (sx,sy) = w (sx,y)
-
-rotate :: Float -> Window -> Window
-rotate ang w screen = Gloss.rotate ang $ w screen
-
-translate :: (Dimension -> Point) -> Window -> Window
-translate factor w screen = Gloss.translate fx fy $ w screen
-    where
-    (fx,fy) = factor screen
-
-text :: String -> Window
-text = const . Gloss.Text

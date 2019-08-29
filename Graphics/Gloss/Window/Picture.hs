@@ -1,6 +1,6 @@
 {-# LANGUAGE CPP, ViewPatterns, TypeSynonymInstances, FlexibleInstances #-}
 
-module Graphics.Gloss.Picture.Size
+module Graphics.Gloss.Window.Picture
     (pictureSize,flattenPicture,flattenScale,flattenTranslate,flattenRotate)
     where
 
