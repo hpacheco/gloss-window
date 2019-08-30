@@ -15,6 +15,7 @@ import Control.Monad.Reader (Reader(..),ReaderT(..))
 import qualified Control.Monad.Reader as Reader
 import Control.Monad.Writer (Writer(..),WriterT(..))
 import qualified Control.Monad.Writer as Writer
+import Control.Monad
 
 import Generics.Pointless.Combinators
 
@@ -31,6 +32,12 @@ mkWindow f = Window $ do
 runWindow :: Dimension -> Window a -> (a,Picture)
 runWindow screen (Window w) = Writer.runWriter (Reader.runReaderT w screen)
 
+execWindow :: Dimension -> Window a -> Picture
+execWindow screen w = snd $ runWindow screen w
+
+askDimension :: Window Dimension
+askDimension = Window $ Reader.ask
+
 withDimension :: (Dimension -> Dimension) -> Window a -> Window a
 withDimension f (Window w) = Window $ Reader.local f w
 
@@ -38,6 +45,9 @@ mapPicture :: (Picture -> Picture) -> Window a -> Window a
 mapPicture f (Window w) = Window $ Reader.mapReaderT (Writer.mapWriter (id >< f)) w
 
 -- * General combinators
+
+none :: Window a -> Window ()
+none w = w >> return ()
 
 empty :: Window ()
 empty = Window $ Writer.tell Blank
@@ -61,6 +71,9 @@ vT sy1 w1 w2  = Window $ do
     Writer.tell $ Pictures [flattenTranslate 0 (realToFrac sy2/2) p1,flattenTranslate 0 (-realToFrac sy1/2) p2]
     return (a,b)
 
+vT' :: (Dimension -> Int) -> Window a -> Window b -> Window (a,b)
+vT' f w1 w2 = liftM f askDimension >>= \i -> vT i w1 w2
+
 -- bottom-biased vertical composition
 -- function determines the height of the bottom window
 vB :: Int -> Window a -> Window b -> Window (a,b)
@@ -71,6 +84,9 @@ vB sy2 w1 w2  = Window $ do
     let (b,p2) = runWindow (sx,sy2) w2
     Writer.tell $ Pictures [flattenTranslate 0 (realToFrac sy2/2) p1,flattenTranslate 0 (-realToFrac sy1/2) p2]
     return (a,b)
+
+vB' :: (Dimension -> Int) -> Window a -> Window b -> Window (a,b)
+vB' f w1 w2 = liftM f askDimension >>= \i -> vB i w1 w2
 
 -- evenly splits the screen vertically into a list
 vs :: [Window a] -> Window [a]
@@ -92,6 +108,9 @@ hL sx1 w1 w2 = Window $ do
     Writer.tell $ Pictures [flattenTranslate (-realToFrac sx2/2) 0 p1,flattenTranslate (realToFrac sx1/2) 0 p2]
     return (a,b)
 
+hL' :: (Dimension -> Int) -> Window a -> Window b -> Window (a,b)
+hL' f w1 w2 = liftM f askDimension >>= \i -> hL i w1 w2
+
 hR :: Int -> Window a -> Window b -> Window (a,b)
 hR sx2 w1 w2 = Window $ do
     (sx,sy) <- Reader.ask
@@ -100,6 +119,9 @@ hR sx2 w1 w2 = Window $ do
     let (b,p2) = runWindow (sx2,sy) w2
     Writer.tell $ Pictures [flattenTranslate (-realToFrac sx2/2) 0 p1,flattenTranslate (realToFrac sx1/2) 0 p2]
     return (a,b)
+    
+hR' :: (Dimension -> Int) -> Window a -> Window b -> Window (a,b)
+hR' f w1 w2 = liftM f askDimension >>= \i -> hR i w1 w2
     
 -- evenly splits the screen horizontally into a list
 hs :: [Window a] -> Window [a]
@@ -149,6 +171,9 @@ scale (fx,fy) w  = Window $ do
     Writer.tell $ Scale fx fy pic
     return a
 
+scale' :: (Dimension -> Point) -> Window a -> Window a
+scale' f w1 = liftM f askDimension >>= \i -> scale i w1
+
 translate :: Point -> Window a -> Window a
 translate (fx,fy) w  = Window $ do
     screen <- Reader.ask
@@ -156,10 +181,16 @@ translate (fx,fy) w  = Window $ do
     Writer.tell $ Translate fx fy pic
     return a
     
+translate' :: (Dimension -> Point) -> Window a -> Window a
+translate' f w1 = liftM f askDimension >>= \i -> translate i w1
+    
 border :: Int -> Window a -> Window a
 border space w = withDimension mkScreen w
     where
     mkScreen screen = screen .-. (space*2,space*2)
+    
+border' :: (Dimension -> Int) -> Window a -> Window a
+border' f w1 = liftM f askDimension >>= \i -> border i w1
     
 rotate :: Float -> Window a -> Window a
 rotate ang w = Window $ do
@@ -167,6 +198,9 @@ rotate ang w = Window $ do
     let (a,pic) = runWindow screen w
     Writer.tell $ Gloss.rotate ang pic
     return a
+    
+rotate' :: (Dimension -> Float) -> Window a -> Window a
+rotate' f w1 = liftM f askDimension >>= \i -> rotate i w1
     
 rectangleSolid :: Window ()
 rectangleSolid = Window $ do
@@ -194,7 +228,10 @@ circleSolid = Window $ do
 
 -- fit picture to window, returns picture's dimension
 fit :: Picture -> Window Dimension
-fit pic@(pictureSize -> (cx,cy)) = Window $ do
+fit pic = fitWith (pictureSize pic) pic
+
+fitWith :: Dimension -> Picture -> Window Dimension
+fitWith (cx,cy) pic = Window $ do
     screen@(sx,sy) <- Reader.ask
     let scalex = realToFrac sx / realToFrac cx
         scaley = realToFrac sy / realToFrac cy
@@ -233,11 +270,11 @@ charWidth :: Int
 charWidth = 70
 
 text :: String -> Window Dimension
-text str = Window $ do
-    let 
-    let textWidth = realToFrac (length str) * (realToFrac charWidth)
-    Writer.tell $ Translate (-realToFrac textWidth/2) (-realToFrac charHeight/2) $ Gloss.Text str
-    return (round textWidth,charHeight)
+text str = fitWith dim pic
+    where
+    textWidth = realToFrac (length str) * (realToFrac charWidth)
+    pic = Translate (-realToFrac textWidth/2) (-realToFrac charHeight/2) $ Gloss.Text str
+    dim = (round textWidth,charHeight)
 
 hLFitV :: Picture -> Window a -> Window (Int,a)
 hLFitV p w2 = Window $ do
@@ -251,8 +288,8 @@ hLFitV p w2 = Window $ do
 const :: Picture -> Window ()
 const p = Window $ Writer.tell p
 
-fixedV :: Int -> Window a -> Window a
-fixedV y w = withDimension mkDim w
-    where
-    mkDim (sx,sy) = (sx,y)
+--fixedV :: Int -> Window a -> Window a
+--fixedV y w = withDimension mkDim w
+--    where
+--    mkDim (sx,sy) = (sx,y)
 
