@@ -187,7 +187,7 @@ translate' f w1 = liftM f askDimension >>= \i -> translate i w1
 border :: Int -> Window a -> Window a
 border space w = withDimension mkScreen w
     where
-    mkScreen screen = screen .-. (space*2,space*2)
+    mkScreen screen = (max 0 >< max 0) $ screen .-. (space*2,space*2)
     
 border' :: (Dimension -> Int) -> Window a -> Window a
 border' f w1 = liftM f askDimension >>= \i -> border i w1
@@ -235,7 +235,7 @@ fitWith (cx,cy) pic = Window $ do
     screen@(sx,sy) <- Reader.ask
     let scalex = realToFrac sx / realToFrac cx
         scaley = realToFrac sy / realToFrac cy
-        scalexy = min scalex scaley
+        scalexy = max 0 (min scalex scaley)
     Writer.tell $ Scale scalexy scalexy pic
     return (round $ realToFrac cx * scalexy,round $ realToFrac cy * scalexy)
 
@@ -243,7 +243,7 @@ fitWith (cx,cy) pic = Window $ do
 fitH :: Picture -> Window Int
 fitH pic@(pictureSize -> (cx,cy)) = Window $ do
     screen@(sx,sy) <- Reader.ask
-    let scalex = realToFrac sx / realToFrac cx
+    let scalex = max 0 (realToFrac sx / realToFrac cx)
     Writer.tell $ Scale scalex scalex pic
     return (round $ realToFrac cy * scalex)
 
@@ -251,7 +251,7 @@ fitH pic@(pictureSize -> (cx,cy)) = Window $ do
 fitV :: Picture -> Window Int
 fitV pic@(pictureSize -> (cx,cy)) = Window $ do
     screen@(sx,sy) <- Reader.ask
-    let scaley = realToFrac sy / realToFrac cy
+    let scaley = max 0 (realToFrac sy / realToFrac cy)
     Writer.tell (Scale scaley scaley pic)
     return (round $ realToFrac cx * scaley)
 
@@ -259,8 +259,8 @@ fitV pic@(pictureSize -> (cx,cy)) = Window $ do
 stretch :: Picture -> Window ()
 stretch pic@(pictureSize -> (cx,cy)) = Window $ do
     screen@(sx,sy) <- Reader.ask
-    let scalex = realToFrac sx / realToFrac cx
-        scaley = realToFrac sy / realToFrac cy
+    let scalex = max 0 (realToFrac sx / realToFrac cx)
+        scaley = max 0 (realToFrac sy / realToFrac cy)
     Writer.tell $ Scale scalex scaley pic
     return ()
 
@@ -284,6 +284,16 @@ hLFitV p w2 = Window $ do
             Writer.tell pic1
             return px
     unWindow $ hL px w1 w2
+
+-- fit vertically with maximum horizontal size
+hLFitV' :: Int -> Picture -> Window a -> Window (Dimension,a)
+hLFitV' maxpx p w2 = Window $ do
+    screen@(sx,sy) <- Reader.ask
+    let (screen1@(px1,py1),pic1) = runWindow (maxpx,sy) $ fit p
+    let w1 = Window $ do
+            Writer.tell pic1
+            return screen1
+    unWindow $ hL px1 w1 w2
 
 const :: Picture -> Window ()
 const p = Window $ Writer.tell p

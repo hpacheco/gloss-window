@@ -37,6 +37,7 @@ flattenPicture (ThickArc x y z w) = ThickArc x y z w
 flattenPicture (Text str) = Text str
 #if defined(ghcjs_HOST_OS)
 #if MIN_VERSION_codeworld_api_gloss(0,3,1)
+flattenPicture (Image w h dta) = Image w h dta
 #else
 flattenPicture (Image dta) = Image dta
 #endif
@@ -75,6 +76,10 @@ bbox (ThickArc _ _ _ _) = error "not handled"
 bbox (Text _) = Points [] -- TODO: hack
 #if defined(ghcjs_HOST_OS)
 #if MIN_VERSION_codeworld_api_gloss(0,3,1)
+bbox (Image w h dta) = Points [(-w2,-h2),(w2,-h2),(w2,h2),(-w2,h2)]
+    where
+    w2 = realToFrac w / 2
+    h2 = realToFrac h / 2
 #else
 bbox (Image {}) = error "not flat!"
 #endif
@@ -97,7 +102,7 @@ boundingBox :: BB -> (Point, Float, Float)
 boundingBox (Elipsis e) = bbElipsis e
 boundingBox (Points l) = bbPath l
 
-reduceBB ((x1,y1),w1,h1) ((x2,y2),w2,h2) = ((xmin,ymin),xmax-xmin,ymax-ymin)
+reduceBB ((x1,y1),w1,h1) ((x2,y2),w2,h2) = ((xmin,ymin),abs (xmax-xmin),abs (ymax-ymin))
  where xmin = min x1 x2
        ymin = min y1 y2
        xmax = max (x1+w1) (x2+w2)
@@ -109,7 +114,7 @@ reduceBBs l = foldl1 reduceBB l
 
 bbPath :: Path -> (Point, Float, Float)
 bbPath [] = ((0,0),0,0)
-bbPath l = ((xmin,ymin),xmax-xmin,ymax-ymin)
+bbPath l = ((xmin,ymin),abs (xmax-xmin),abs (ymax-ymin))
  where (xs,ys) = unzip l
        xmin = minimum xs
        ymin = minimum ys
@@ -118,7 +123,7 @@ bbPath l = ((xmin,ymin),xmax-xmin,ymax-ymin)
 
 bbElipsis :: Elipsis -> (Point,Float,Float)
 bbElipsis (a,b,c,d,e,f) | dlt==0 = error "delta"
-                        | otherwise = ((xl,yb),xr-xl,yt-yb)
+                        | otherwise = ((xl,yb),abs (xr-xl),abs (yt-yb))
  where dlt = 4*a*c - b^2
        xc = (b*e - 2*c*d) / dlt
        yc = (b*d - 2*a*e) / dlt
