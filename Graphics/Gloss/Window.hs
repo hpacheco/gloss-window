@@ -21,6 +21,8 @@ import Generics.Pointless.Combinators
 
 -- * Monad
 
+type SimpleWindow = Window ()
+
 newtype Window a = Window { unWindow :: ReaderT Dimension (Writer Picture) a }
     deriving (Monad,Applicative,Functor)
 
